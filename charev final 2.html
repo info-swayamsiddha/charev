@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>CharEV (Prototype)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    :root{
+      --green:#2b9d5b;
+      --bg:#f6fbf6;
+      --card:#fff;
+      --muted:#666;
+    }
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial,sans-serif;background:var(--bg);}
+    .splash{background:linear-gradient(135deg,var(--green),#1f7a44);color:#fff;width:100%;height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column}
+    .splash h1{font-size:48px;margin:0}
+    .app{max-width:1100px;margin:18px auto;padding:12px}
+    .card{background:var(--card);border-radius:12px;box-shadow:0 8px 22px rgba(0,0,0,0.08);padding:18px}
+    input,select,button,textarea{font-size:15px;padding:10px;border-radius:10px;border:1px solid #e6e6e6;width:100%;box-sizing:border-box}
+    label{display:block;margin-bottom:6px;color:#222;font-weight:600}
+    .row{display:flex;gap:12px}
+    .muted{color:var(--muted);font-size:13px}
+    button.primary{background:var(--green);color:#fff;border:0;font-weight:700;padding:10px 12px;cursor:pointer;border-radius:10px}
+    button.ghost{background:transparent;border:1px solid #ddd;padding:9px;border-radius:10px;cursor:pointer}
+    #miniMap, #map{height:360px;border-radius:10px;border:1px solid #eee;overflow:hidden}
+    .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+    .badge{background:#e8f6ea;color:var(--green);padding:6px 8px;border-radius:8px;font-weight:600}
+    .modal-back{position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:9999}
+    .modal{background:#fff;border-radius:12px;padding:18px;max-width:540px;width:92%}
+    @media(max-width:900px){ .row{flex-direction:column} #miniMap,#map{height:240px} }
+  </style>
+</head>
+<body>
+
+ <div id="splash" class="splash">
+  <img src="assets/charevlogo.jpeg" alt="CharEV Logo" style="width:120px;height:auto;margin-bottom:16px">
+  <h1>CharEV</h1>
+  <p style="opacity:0.95;margin-top:8px;font-size:16px;">Power anywhere </p>
+</div>
+
+  <!-- App -->
+  <div id="app" style="display:none" class="app">
+
+    <!-- Login card -->
+    <div id="loginCard" class="card" style="max-width:640px;margin:0 auto">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+        <div style="width:56px;height:56px;border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#fff">
+  <img src="assets/charevlogo.jpeg" alt="CharEV Logo" style="width:100%;height:100%;object-fit:contain">
+</div>
+
+        <div>
+          <div style="font-size:20px;font-weight:800">CharEV</div>
+          <div class="muted">Emergency & on-demand home EV charging </div>
+        </div>
+      </div>
+
+      <form id="loginForm">
+        <label for="email">Email</label>
+        <input id="email" type="email" placeholder="you@domain.com" required>
+
+        <label for="password" style="margin-top:10px">Password</label>
+        <input id="password" type="password" placeholder="••••••" required>
+
+        <label for="role" style="margin-top:10px">Role</label>
+        <select id="role" required>
+          <option value="">-- choose role --</option>
+          <option value="Lender">Lender (provide charger)</option>
+          <option value="Renter">Renter (need charging)</option>
+        </select>
+
+        <div style="display:flex;gap:12px;margin-top:14px">
+          <button type="submit" class="primary" style="flex:1">Login / Continue</button>
+          <button id="demoBtn" type="button" class="ghost">Load Bhubaneswar Demo</button>
+        </div>
+        <div class="muted" style="margin-top:10px">Tip: Use <span class="badge">Load Bhubaneswar Demo</span> to pre-populate chargers.</div>
+      </form>
+    </div>
+
+    <!-- Home area (hidden until login) -->
+    <div id="homeArea" style="display:none;margin-top:16px">
+
+      <div class="topbar">
+        <div>
+          <div id="welcomeTitle" style="font-weight:800">Welcome</div>
+          <div id="welcomeEmail" class="muted">you@domain.com</div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:center">
+          <div id="roleBadge" class="muted"></div>
+          <button id="logoutBtn" class="ghost">Logout</button>
+        </div>
+      </div>
+
+      <!-- Lender view -->
+      <div id="lenderView" style="display:none" class="card">
+        <h3 style="margin-top:0">Register Charger (mock)</h3>
+        <div class="muted">Provide specifications, hourly rate (INR) and select location on the mini-map (Bhubaneswar).</div>
+
+        <div class="row" style="margin-top:12px;align-items:flex-start">
+          <div style="flex:1;min-width:260px">
+            <label>Charger Specifications</label>
+            <input id="specs" placeholder="ex: 7kW AC Type 2">
+
+            <label style="margin-top:10px">Hourly Rate (₹ INR)</label>
+            <input id="rate" placeholder="ex: 120">
+
+            <label style="margin-top:10px">Latitude</label>
+            <input id="lat" placeholder="click mini-map or enter manually">
+
+            <label style="margin-top:10px">Longitude</label>
+            <input id="lng" placeholder="click mini-map or enter manually">
+
+            <div style="display:flex;gap:10px;margin-top:12px">
+              <button id="saveChargerBtn" class="primary">Save Charger</button>
+              <button id="switchToMapBtn" class="ghost">View Map (Renter)</button>
+            </div>
+          </div>
+
+          <div style="flex:1;min-width:320px">
+            <div style="font-weight:700;margin-bottom:8px">Mini-map (click to set location)</div>
+            <div id="miniMap"></div>
+            <div class="muted" style="margin-top:8px">Click a point in Bhubaneswar to auto-fill lat/lng for the charger.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Renter view -->
+      <div id="renterView" style="display:none;margin-top:12px" class="card">
+        <h3 style="margin-top:0">Find Chargers Nearby (Bhubaneswar)</h3>
+        <div class="muted">Markers show charger specs & hourly rate in <strong>₹ INR</strong>. Click a marker → Book (mock).</div>
+
+        <div id="map" style="margin-top:12px"></div>
+
+        <div style="display:flex;gap:12px;align-items:center;margin-top:12px">
+          <button id="nearestBtn" class="primary">Show Nearest (to city center)</button>
+          <button id="listBtn" class="ghost">Show List</button>
+          <div style="margin-left:auto" class="muted">Center: Bhubaneswar (demo)</div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- Modal root -->
+  <div id="modalRoot" style="display:none"></div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- App JS (single-file) -->
+  <script>
+  (function(){
+    // Storage key
+    const STORAGE_KEY = 'charev_bhubaneswar_v1';
+
+    // Bhubaneswar demo chargers (INR)
+    const BHUB_DEMO = [
+      { id:'bb1', lat:20.296059, lng:85.824539, specs:'7kW AC Type 2', rate:'120', owner:'owner1@in' },
+      { id:'bb2', lat:20.300500, lng:85.822200, specs:'22kW AC Fast', rate:'250', owner:'owner2@in' },
+      { id:'bb3', lat:20.310000, lng:85.830000, specs:'50kW DC Fast', rate:'400', owner:'owner3@in' }
+    ];
+
+    function loadChargers(){ const raw = localStorage.getItem(STORAGE_KEY); if(!raw) return []; try{return JSON.parse(raw)}catch(e){return []} }
+    function saveChargers(list){ localStorage.setItem(STORAGE_KEY, JSON.stringify(list)) }
+
+    // Splash -> show app
+    setTimeout(()=>{ document.getElementById('splash').style.display='none'; document.getElementById('app').style.display='block'; initLogin(); }, 1100);
+
+    // Initializers
+    function initLogin(){
+      document.getElementById('demoBtn').addEventListener('click', ()=> {
+        saveChargers(BHUB_DEMO.slice());
+        alert('Bhubaneswar demo chargers loaded (₹INR).');
+      });
+
+      document.getElementById('loginForm').addEventListener('submit', (e)=> {
+        e.preventDefault();
+        const email = document.getElementById('email').value.trim() || 'demo@user';
+        const role = document.getElementById('role').value;
+        if(!role){ alert('Select a role'); return; }
+        showHome(role, email);
+      });
+    }
+
+    // Home view logic
+    let mainMap=null, miniMap=null, activeMarkers=[];
+    function showHome(role,email){
+      document.getElementById('loginCard').style.display='none';
+      document.getElementById('homeArea').style.display='block';
+      document.getElementById('welcomeTitle').textContent = `Welcome, ${role}`;
+      document.getElementById('welcomeEmail').textContent = email;
+      document.getElementById('roleBadge').textContent = role;
+      document.getElementById('logoutBtn').addEventListener('click', ()=> location.reload());
+
+      if(role === 'Lender'){
+        document.getElementById('lenderView').style.display='block';
+        document.getElementById('renterView').style.display='none';
+        initMiniMap();
+      } else {
+        document.getElementById('lenderView').style.display='none';
+        document.getElementById('renterView').style.display='block';
+        initMainMap();
+      }
+
+      document.getElementById('switchToMapBtn').addEventListener('click', ()=> {
+        document.getElementById('lenderView').style.display='none';
+        document.getElementById('renterView').style.display='block';
+        initMainMap();
+      });
+    }
+
+    // Mini map for lender (Bhubaneswar center)
+    function initMiniMap(){
+      if(miniMap) return;
+      miniMap = L.map('miniMap', { zoomControl: true }).setView([20.296059,85.824539], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{ attribution:'' }).addTo(miniMap);
+      let marker=null;
+      miniMap.on('click', (e)=> {
+        const lat = e.latlng.lat.toFixed(6), lng = e.latlng.lng.toFixed(6);
+        document.getElementById('lat').value = lat;
+        document.getElementById('lng').value = lng;
+        if(marker) miniMap.removeLayer(marker);
+        marker = L.marker([lat, lng]).addTo(miniMap);
+      });
+      document.getElementById('saveChargerBtn').addEventListener('click', ()=> {
+        const specs = document.getElementById('specs').value.trim();
+        const rate = document.getElementById('rate').value.trim();
+        const lat = parseFloat(document.getElementById('lat').value);
+        const lng = parseFloat(document.getElementById('lng').value);
+        if(!specs || !rate || isNaN(lat) || isNaN(lng)){ alert('Please fill specs, rate and set location on mini-map.'); return; }
+        const list = loadChargers();
+        list.push({ id:'c'+Date.now(), specs, rate, lat, lng, owner:'me@lender' });
+        saveChargers(list);
+        alert('Charger registered (mock). Renters will see it on the map.');
+        // clear
+        document.getElementById('specs').value=''; document.getElementById('rate').value=''; document.getElementById('lat').value=''; document.getElementById('lng').value='';
+      });
+    }
+
+    // Main map for renter
+    function initMainMap(){
+      if(mainMap) { refreshMarkers(); return; }
+      mainMap = L.map('map').setView([20.296059,85.824539], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{ attribution:'' }).addTo(mainMap);
+      // ensure demo seed if empty
+      if(loadChargers().length === 0) saveChargers(BHUB_DEMO.slice());
+      refreshMarkers();
+      document.getElementById('nearestBtn').onclick = showNearest;
+      document.getElementById('listBtn').onclick = showList;
+    }
+
+    // Place markers from storage
+    function refreshMarkers(){
+      // remove old
+      activeMarkers.forEach(m => mainMap.removeLayer(m));
+      activeMarkers = [];
+      const list = loadChargers();
+      list.forEach(ch => {
+        const m = L.marker([ch.lat, ch.lng]).addTo(mainMap);
+        const popupHtml = `<strong>${escapeHtml(ch.specs)}</strong><br>₹${escapeHtml(ch.rate)}/hr<br><div style="margin-top:6px"><button class="book-btn" data-id="${escapeHtml(ch.id)}">Book</button></div>`;
+        m.bindPopup(popupHtml);
+        m.on('popupopen', ()=> {
+          // attach click once popup is in DOM
+          setTimeout(()=> {
+            const btn = document.querySelector('.book-btn[data-id="'+ch.id+'"]');
+            if(btn) btn.onclick = ()=> triggerBooking(ch);
+          },50);
+        });
+        activeMarkers.push(m);
+      });
+    }
+
+    // Booking modal
+    function triggerBooking(ch){
+      const modalRoot = document.getElementById('modalRoot');
+      modalRoot.innerHTML = `<div class="modal-back"><div class="modal">
+        <h3>Booking Requested</h3>
+        <p><strong>Charger:</strong> ${escapeHtml(ch.specs)}<br>
+           <strong>Rate:</strong> ₹${escapeHtml(ch.rate)} / hr<br>
+           <strong>Location:</strong> ${Number(ch.lat).toFixed(6)}, ${Number(ch.lng).toFixed(6)}</p>
+        <p class="muted">This is a simulated booking for investor demo. Owner will be notified (mock).</p>
+        <div style="text-align:right;margin-top:12px"><button id="okBook" class="primary">OK</button></div>
+      </div></div>`;
+      modalRoot.style.display='block';
+      document.getElementById('okBook').onclick = ()=> { alert('Booking requested (mock).'); modalRoot.innerHTML=''; modalRoot.style.display='none'; };
+    }
+
+    // Show nearest (simple straight-line distance)
+    function showNearest(){
+      const list = loadChargers();
+      if(!list || list.length===0){ alert('No chargers available'); return; }
+      const center = { lat:20.296059, lng:85.824539 };
+      let nearest = null, minD = Infinity;
+      list.forEach(ch => {
+        const d = haversine(center.lat, center.lng, ch.lat, ch.lng);
+        if(d < minD){ minD = d; nearest = ch; }
+      });
+      if(nearest){
+        mainMap.setView([nearest.lat, nearest.lng], 15);
+        // open popup for matching marker
+        activeMarkers.forEach(m => { const p = m.getLatLng(); if(Math.abs(p.lat-nearest.lat)<1e-6 && Math.abs(p.lng-nearest.lng)<1e-6) m.openPopup(); });
+      }
+    }
+
+    // Show list modal
+    function showList(){
+      const list = loadChargers();
+      if(!list || list.length===0){ alert('No chargers'); return; }
+      let html = '<div class="modal-back"><div class="modal"><h3>Available Chargers</h3><div style="margin-top:10px">';
+      list.forEach(ch => {
+        html += `<div style="padding:10px;border-radius:8px;border:1px solid #eee;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
+          <div><strong>${escapeHtml(ch.specs)}</strong><div class="muted">₹${escapeHtml(ch.rate)}/hr • ${escapeHtml(ch.owner||'owner')}</div></div>
+          <div><button class="primary book-list-btn" data-id="${escapeHtml(ch.id)}">Book</button></div>
+        </div>`;
+      });
+      html += `</div><div style="text-align:right"><button id="closeList" class="ghost">Close</button></div></div></div>`;
+      const modalRoot = document.getElementById('modalRoot'); modalRoot.innerHTML = html; modalRoot.style.display='block';
+      document.getElementById('closeList').onclick = ()=> { modalRoot.innerHTML=''; modalRoot.style.display='none'; };
+      Array.from(document.querySelectorAll('.book-list-btn')).forEach(btn => {
+        btn.onclick = ()=> {
+          const id = btn.getAttribute('data-id');
+          const ch = list.find(x => x.id === id);
+          if(ch) triggerBooking(ch);
+        };
+      });
+    }
+
+    // Haversine distance (km)
+    function haversine(lat1,lon1,lat2,lon2){
+      function toRad(v){ return v * Math.PI/180; }
+      const R=6371;
+      const dLat = toRad(lat2-lat1), dLon = toRad(lon2-lon1);
+      const a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)*Math.sin(dLon/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R*c;
+    }
+
+    // escape helper
+    function escapeHtml(s){ return (''+s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;'); }
+
+    // initial seeding: not automatic (use Load Demo) — makes demo deliberate
+    // You could uncomment next line to autoload:
+    // if(!localStorage.getItem(STORAGE_KEY)) saveChargers(BHUB_DEMO.slice());
+
+  })();
+  </script>
+
+</body>
+</html>
